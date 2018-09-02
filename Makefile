@@ -37,13 +37,13 @@ RPMSPECDIR	= $(shell rpm --eval '%_specdir')
 
 CC		= gcc
 INCLUDE		=
-SBIN		= $(BUILD_ROOT)/sbin
+SBIN		= $(RPM_BUILD_ROOT)/sbin
 MANDIR		= usr/man
-MAN		= $(BUILD_ROOT)/$(MANDIR)/man8
-INIT		= $(BUILD_ROOT)/etc/rc.d/init.d
+MAN		= $(RPM_BUILD_ROOT)/$(MANDIR)/man8
+INIT		= $(RPM_BUILD_ROOT)/etc/rc.d/init.d
 MKDIR		= mkdir
 INSTALL		= install
-STATIC_LIBS	= libipvs/libipvs.a
+STATIC_LIBS	= ../keepalived/keepalived/libipvs-2.6/libipvs.a
 
 ifeq "${ARCH}" "sparc64"
     CFLAGS = -Wall -Wunused -Wstrict-prototypes -g -m64 -pipe -mcpu=ultrasparc -mcmodel=medlow
@@ -62,17 +62,18 @@ RPMBUILD = $(shell				\
 		echo "/bin/rpm";		\
 	fi )
 
-ifeq (,$(FORCE_GETOPT))
-LIB_SEARCH = /lib64 /usr/lib64 /usr/local/lib64 /lib /usr/lib /usr/local/lib
-POPT_LIB = $(shell for i in $(LIB_SEARCH); do \
-  if [ -f $$i/libpopt.a ]; then \
-    if nm $$i/libpopt.a | fgrep -q poptGetContext; then \
-	echo "-lpopt"; \
-	break; \
-    fi; \
-  fi; \
-done)
-endif
+#ifeq (,$(FORCE_GETOPT))
+#LIB_SEARCH = /lib64 /usr/lib64 /usr/local/lib64 /lib /usr/lib /usr/local/lib
+#POPT_LIB = $(shell for i in $(LIB_SEARCH); do \
+#  if [ -f $$i/libpopt.a ]; then \
+#    if nm $$i/libpopt.a | fgrep -q poptGetContext; then \
+#	echo "-lpopt"; \
+#	break; \
+#    fi; \
+#  fi; \
+#done)
+#endif
+POPT_LIB = -lpopt 
 
 ifneq (,$(POPT_LIB))
 POPT_DEFINE = -DHAVE_POPT
@@ -80,9 +81,6 @@ endif
 
 OBJS		= ipvsadm.o config_stream.o dynamic_array.o
 LIBS		= $(POPT_LIB)
-ifneq (0,$(HAVE_NL))
-LIBS		+= -lnl
-endif
 DEFINES		= -DVERSION=\"$(VERSION)\" -DSCHEDULERS=\"$(SCHEDULERS)\" \
 		  -DPE_LIST=\"$(PE_LIST)\" $(POPT_DEFINE)
 DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
@@ -91,10 +89,7 @@ DEFINES		+= $(shell if [ ! -f ../ip_vs.h ]; then	\
 
 .PHONY	= all clean install dist distclean rpm rpms
 
-all:            libs ipvsadm
-
-libs:
-		make -C libipvs
+all:            ipvsadm
 
 ipvsadm:	$(OBJS) $(STATIC_LIBS)
 		$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -116,7 +111,6 @@ clean:
 		rm -rf debian/tmp
 		find . -name '*.[ao]' -o -name "*~" -o -name "*.orig" \
 		  -o -name "*.rej" -o -name core | xargs rm -f
-		make -C libipvs clean
 
 distclean:	clean
 

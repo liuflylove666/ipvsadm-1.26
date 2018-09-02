@@ -115,7 +115,7 @@
 #define IPVS_OPTION_PROCESSING	"popt"
 
 #include "config_stream.h"
-#include "libipvs/libipvs.h"
+#include "../keepalived/keepalived/libipvs-2.6/libipvs.h"
 
 #define IPVSADM_VERSION_NO	"v" VERSION
 #define IPVSADM_VERSION_DATE	"2008/5/15"
@@ -138,7 +138,10 @@
 #define CMD_RESTORE		(CMD_NONE+12)
 #define CMD_SAVE		(CMD_NONE+13)
 #define CMD_ZERO		(CMD_NONE+14)
-#define CMD_MAX			CMD_ZERO
+#define CMD_ADDLADDR		(CMD_NONE+15)
+#define CMD_DELLADDR		(CMD_NONE+16)
+#define CMD_GETLADDR		(CMD_NONE+17)
+#define CMD_MAX			CMD_GETLADDR
 #define NUMBER_OF_CMD		(CMD_MAX - CMD_NONE)
 
 static const char* cmdnames[] = {
@@ -156,33 +159,10 @@ static const char* cmdnames[] = {
 	"restore",
 	"save",
 	"zero",
+	"add-laddr" , 
+	"del-laddr" , 
+	"get-laddr" , 
 };
-
-#define OPT_NONE		0x000000
-#define OPT_NUMERIC		0x000001
-#define OPT_CONNECTION		0x000002
-#define OPT_SERVICE		0x000004
-#define OPT_SCHEDULER		0x000008
-#define OPT_PERSISTENT		0x000010
-#define OPT_NETMASK		0x000020
-#define OPT_SERVER		0x000040
-#define OPT_FORWARD		0x000080
-#define OPT_WEIGHT		0x000100
-#define OPT_UTHRESHOLD		0x000200
-#define OPT_LTHRESHOLD		0x000400
-#define OPT_MCAST		0x000800
-#define OPT_TIMEOUT		0x001000
-#define OPT_DAEMON		0x002000
-#define OPT_STATS		0x004000
-#define OPT_RATE		0x008000
-#define OPT_THRESHOLDS		0x010000
-#define OPT_PERSISTENTCONN	0x020000
-#define OPT_NOSORT		0x040000
-#define OPT_SYNCID		0x080000
-#define OPT_EXACT		0x100000
-#define OPT_ONEPACKET		0x200000
-#define OPT_PERSISTENCE_ENGINE  0x400000
-#define NUMBER_OF_OPT		23
 
 static const char* optnames[] = {
 	"numeric",
@@ -208,6 +188,9 @@ static const char* optnames[] = {
 	"syncid",
 	"exact",
 	"ops",
+	"pe" , 
+	"local-address" , 
+	"synproxy" , 
 };
 
 /*
@@ -220,21 +203,24 @@ static const char* optnames[] = {
  */
 static const char commands_v_options[NUMBER_OF_CMD][NUMBER_OF_OPT] =
 {
-	/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops */
-/*ADD*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' '},
-/*EDIT*/    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' '},
-/*DEL*/     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*FLUSH*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*LIST*/    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x'},
-/*ADDSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*DELSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*EDITSRV*/ {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*TIMEOUT*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*STARTD*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x'},
-/*STOPD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x'},
-/*RESTORE*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*SAVE*/    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
-/*ZERO*/    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+	/*   -n   -c   svc  -s   -p   -M   -r   fwd  -w   -x   -y   -mc  tot  dmn  -st  -rt  thr  -pc  srt  sid  -ex  ops  pe   laddr syn*/
+/*ADD*/     {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' '},
+/*EDIT*/    {'x', 'x', '+', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', ' '},
+/*DEL*/     {'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*FLUSH*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*LIST*/    {' ', '1', '1', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '1', '1', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x'},
+/*ADDSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*DELSRV*/  {'x', 'x', '+', 'x', 'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*EDITSRV*/ {'x', 'x', '+', 'x', 'x', 'x', '+', ' ', ' ', ' ', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*TIMEOUT*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*STARTD*/  {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x'},
+/*STOPD*/   {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x'},
+/*RESTORE*/ {'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*SAVE*/    {' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*ZERO*/    {'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
+/*ADDLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x'},
+/*DELLADDR*/{'x', 'x', '+', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', '+', 'x'},
+/*GETLADDR*/{'x', 'x', ' ', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x'},
 };
 
 /* printing format flags */
@@ -266,6 +252,7 @@ struct ipvs_command_entry {
 	ipvs_dest_t		dest;
 	ipvs_timeout_t		timeout;
 	ipvs_daemon_t		daemon;
+	ipvs_laddr_t		laddr;
 };
 
 /* Use values outside ASCII range so that if an option has
@@ -320,6 +307,8 @@ static void list_service(ipvs_service_t *svc, unsigned int format);
 static void list_all(unsigned int format);
 static void list_timeout(void);
 static void list_daemon(void);
+static int  list_laddrs(ipvs_service_t *svc , int with_title);
+static int list_all_laddrs(void);
 
 static int modprobe_ipvs(void);
 static void check_ipvs_version(void);
@@ -384,6 +373,10 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		  TAG_START_DAEMON, NULL, NULL },
 		{ "stop-daemon", '\0', POPT_ARG_STRING, &optarg,
 		  TAG_STOP_DAEMON, NULL, NULL },
+		{ "add-laddr", 'P', POPT_ARG_NONE, NULL, 'P', NULL, NULL },
+		{ "del-laddr", 'Q', POPT_ARG_NONE, NULL, 'Q', NULL, NULL },
+		{ "get-laddr", 'G', POPT_ARG_NONE, NULL, 'G', NULL, NULL },
+
 		{ "tcp-service", 't', POPT_ARG_STRING, &optarg, 't',
 		  NULL, NULL },
 		{ "udp-service", 'u', POPT_ARG_STRING, &optarg, 'u',
@@ -399,6 +392,7 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "masquerading", 'm', POPT_ARG_NONE, NULL, 'm', NULL, NULL },
 		{ "ipip", 'i', POPT_ARG_NONE, NULL, 'i', NULL, NULL },
 		{ "gatewaying", 'g', POPT_ARG_NONE, NULL, 'g', NULL, NULL },
+		{ "fullnat" , 'b' , POPT_ARG_NONE, NULL, 'b', NULL, NULL },
 		{ "weight", 'w', POPT_ARG_STRING, &optarg, 'w', NULL, NULL },
 		{ "u-threshold", 'x', POPT_ARG_STRING, &optarg, 'x',
 		  NULL, NULL },
@@ -426,6 +420,8 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		{ "ops", 'o', POPT_ARG_NONE, NULL, 'o', NULL, NULL },
 		{ "pe", '\0', POPT_ARG_STRING, &optarg, TAG_PERSISTENCE_ENGINE,
 		  NULL, NULL },
+		{ "laddr", 'z', POPT_ARG_STRING, &optarg, 'z', NULL, NULL },
+		{ "synproxy", 'j' , POPT_ARG_STRING, &optarg, 'j', NULL, NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
@@ -494,6 +490,15 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		break;
 	case 'v':
 		version_exit(0);
+		break;
+	case 'P':
+		set_command(&ce->cmd, CMD_ADDLADDR);
+		break;
+	case 'Q':
+		set_command(&ce->cmd, CMD_DELLADDR);
+		break;
+	case 'G':
+		set_command(&ce->cmd, CMD_GETLADDR);
 		break;
 	default:
 		tryhelp_exit(argv[0], -1);
@@ -566,6 +571,10 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 		case 'g':
 			set_option(options, OPT_FORWARD);
 			ce->dest.conn_flags = IP_VS_CONN_F_DROUTE;
+			break;
+		case 'b':
+			set_option(options, OPT_FORWARD);
+			ce->dest.conn_flags = IP_VS_CONN_F_FULLNAT;
 			break;
 		case 'm':
 			set_option(options, OPT_FORWARD);
@@ -656,6 +665,33 @@ parse_options(int argc, char **argv, struct ipvs_command_entry *ce,
 			set_option(options, OPT_PERSISTENCE_ENGINE);
 			strncpy(ce->svc.pe_name, optarg, IP_VS_PENAME_MAXLEN);
 			break;
+		case 'z':
+			{
+			ipvs_service_t		nsvc;
+
+			set_option(options, OPT_LOCAL_ADDRESS);
+			parse = parse_service(optarg, &nsvc);
+			if (!(parse & SERVICE_ADDR))
+				fail(2, "illegal local address");
+			ce->laddr.af = nsvc.af;
+			ce->laddr.addr = nsvc.addr;
+			ce->laddr.__addr_v4 = nsvc.addr.ip;
+			break;
+
+			}
+		case 'j':
+			{
+			set_option(options, OPT_SYNPROXY);
+
+			if(!memcmp(optarg , "enable" , strlen("enable")))
+				ce->svc.flags = ce->svc.flags | IP_VS_CONN_F_SYNPROXY;
+			else if(!memcmp(optarg , "disable" , strlen("disable")))
+				ce->svc.flags = ce->svc.flags & (~IP_VS_CONN_F_SYNPROXY);
+			else
+				fail(2 , "synproxy switch must be enable or disable\n");
+
+			break;
+			}
 		default:
 			fail(2, "invalid option `%s'",
 			     poptBadOption(context, POPT_BADOPTION_NOALIAS));
@@ -807,7 +843,7 @@ static int process_options(int argc, char **argv, int reading_stdin)
 		break;
 
 	case CMD_EDIT:
-		result = ipvs_update_service(&ce.svc);
+		result = ipvs_update_service_by_options(&ce.svc, options);
 		break;
 
 	case CMD_DEL:
@@ -840,6 +876,22 @@ static int process_options(int argc, char **argv, int reading_stdin)
 
 	case CMD_STOPDAEMON:
 		result = ipvs_stop_daemon(&ce.daemon);
+		break;
+
+	case CMD_ADDLADDR:
+		result = ipvs_add_laddr(&ce.svc , &ce.laddr);
+		break;
+
+	case CMD_DELLADDR:
+		result = ipvs_del_laddr(&ce.svc , &ce.laddr);
+		break;
+
+	case CMD_GETLADDR:
+		if(options & OPT_SERVICE)
+			result = list_laddrs(&ce.svc , 1);
+		else
+			result = list_all_laddrs();
+		break;
 	}
 
 	if (result)
@@ -1070,11 +1122,13 @@ static void usage_exit(const char *program, const int exit_status)
 	version(stream);
 	fprintf(stream,
 		"Usage:\n"
-		"  %s -A|E -t|u|f service-address [-s scheduler] [-p [timeout]] [-M netmask] [--pe persistence_engine]\n"
+		"  %s -A|E -t|u|f service-address [-s scheduler] [-j eanble/disable] [-p [timeout]] [-M netmask] [--pe persistence_engine]\n"
 		"  %s -D -t|u|f service-address\n"
 		"  %s -C\n"
 		"  %s -R\n"
 		"  %s -S [-n]\n"
+		"  %s -P|Q -t|u|f service-address -z local-address\n"
+		"  %s -G -t|u|f service-address \n"
 		"  %s -a|e -t|u|f service-address -r server-address [options]\n"
 		"  %s -d -t|u|f service-address -r server-address\n"
 		"  %s -L|l [options]\n"
@@ -1084,6 +1138,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  %s --stop-daemon state\n"
 		"  %s -h\n\n",
 		program, program, program,
+		program, program, 
 		program, program, program, program, program,
 		program, program, program, program, program);
 
@@ -1095,6 +1150,9 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --delete-service  -D        delete virtual service\n"
 		"  --clear           -C        clear the whole table\n"
 		"  --restore         -R        restore rules from stdin\n"
+		"  --add-laddr       -P        add local address\n"
+		"  --del-laddr       -Q        del local address\n"
+		"  --get-laddr       -G        get local address\n"
 		"  --save            -S        save rules to stdout\n"
 		"  --add-server      -a        add real server with options\n"
 		"  --edit-server     -e        edit real server with options\n"
@@ -1122,6 +1180,7 @@ static void usage_exit(const char *program, const int exit_status)
 		"  --real-server  -r server-address    server-address is host (and port)\n"
 		"  --gatewaying   -g                   gatewaying (direct routing) (default)\n"
 		"  --ipip         -i                   ipip encapsulation (tunneling)\n"
+		"  --fullnat      -b                   fullnat mode\n"		
 		"  --masquerading -m                   masquerading (NAT)\n"
 		"  --weight       -w weight            capacity of real server\n"
 		"  --u-threshold  -x uthreshold        upper threshold of connections\n"
@@ -1352,6 +1411,9 @@ static inline char *fwd_name(unsigned flags)
 	case IP_VS_CONN_F_DROUTE:
 		fwd = "Route";
 		break;
+	case IP_VS_CONN_F_FULLNAT:
+		fwd = "FullNat";
+		break;
 	}
 	return fwd;
 }
@@ -1520,6 +1582,8 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 			if (se->flags & IP_VS_SVC_F_ONEPACKET)
 				printf(" ops");
 		}
+		if (se->flags & IP_VS_CONN_F_SYNPROXY)
+			printf(" synproxy");
 	}
 	printf("\n");
 
@@ -1575,6 +1639,121 @@ print_service_entry(ipvs_service_entry_t *se, unsigned int format)
 	free(d);
 }
 
+static void list_laddrs_print_title(void)
+{
+	printf("%-20s %-8s %-20s %-10s %-10s\n" , 
+		"VIP:VPORT" ,
+		"TOTAL" ,
+		"SNAT_IP",
+		"CONFLICTS",
+		"CONNS" );
+}
+
+static void list_laddrs_print_service(struct ip_vs_get_laddrs *d)
+{
+	char *	vname;
+
+	if (!(vname = addrport_to_anyname(d->af, &d->addr, ntohs(d->port),
+		d->protocol, FMT_NUMERIC)))
+		fail(2, "addrport_to_anyname: %s", strerror(errno));	
+
+	printf("%-20s %-8u \n" , vname , d->num_laddrs);
+	free(vname);
+}
+
+#define PRINT_NIP(x)\
+	((x >>  0) & 0xff) , \
+	((x >>  8) & 0xff) , \
+	((x >>  16) & 0xff) , \
+	((x >>  24) & 0xff)
+
+static void list_laddrs_print_laddr(struct ip_vs_laddr_entry * entry)
+{
+	char	pbuf[32];
+
+	sprintf(pbuf , "%u.%u.%u.%u" , PRINT_NIP(entry->addr.ip));
+	
+	printf("%-20s %-8s %-20s %-10lu %-10u\n" , 
+		"" , 
+		"" , 
+		pbuf,
+		entry->port_conflict,
+		entry->conn_counts);
+}
+
+static void print_service_and_laddrs(struct ip_vs_get_laddrs* d, int with_title)
+{
+	int i = 0;
+	
+	if(with_title)
+		list_laddrs_print_title();
+
+	list_laddrs_print_service(d);
+	for(i = 0 ; i < d->num_laddrs ; i ++){
+		list_laddrs_print_laddr(d->entrytable + i); 
+	}
+
+	return;
+}
+
+
+static int list_laddrs(ipvs_service_t *svc , int with_title)
+{
+	ipvs_service_entry_t *entry;
+	struct ip_vs_get_laddrs *d;
+
+	if (!(entry = ipvs_get_service(svc->fwmark, svc->af, svc->protocol,
+				       svc->addr, svc->port))) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		return -1;
+	}
+
+	if (!(d = ipvs_get_laddrs(entry))) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		free(entry);
+		return -1;
+	}	
+
+	print_service_and_laddrs(d, with_title);
+
+	free(entry);
+	free(d);
+
+	return 0;
+}
+
+
+static int list_all_laddrs(void)
+{
+	struct ip_vs_get_services *get;
+	struct ip_vs_get_laddrs   *d;
+	int i;
+	int title_enable = 1;
+
+	if (!(get = ipvs_get_services())) {
+		fprintf(stderr, "%s\n", ipvs_strerror(errno));
+		return -1;
+	}
+
+	for (i = 0; i < get->num_services; i++){
+		if(!(d = ipvs_get_laddrs(&(get->entrytable[i])))) {
+			free(get);
+			fprintf(stderr, "%s\n", ipvs_strerror(errno));
+			return -1;
+		}
+		
+		if(i != 0)
+			title_enable = 0;
+		print_service_and_laddrs(d, title_enable);
+
+		free(d);
+	}
+	
+	free(get);
+	return 0;
+
+}
+
 
 static void list_service(ipvs_service_t *svc, unsigned int format)
 {
@@ -1589,6 +1768,7 @@ static void list_service(ipvs_service_t *svc, unsigned int format)
 	print_title(format);
 	print_service_entry(entry, format);
 	free(entry);
+
 }
 
 
