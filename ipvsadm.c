@@ -1412,7 +1412,7 @@ static inline char *fwd_name(unsigned flags)
 		fwd = "Route";
 		break;
 	case IP_VS_CONN_F_FULLNAT:
-		fwd = "FullNat";
+		fwd = "FNAT";
 		break;
 	}
 	return fwd;
